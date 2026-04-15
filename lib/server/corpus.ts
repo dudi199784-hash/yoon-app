@@ -240,34 +240,6 @@ export async function saveCorpusFromZip(zipFile: File): Promise<CorpusData> {
   const supabase = getSupabaseAdmin();
   const entriesToInsert = Array.from(dedupMap.values());
 
-  async function clearTableInBatches(table: "corpus_entries" | "corpus_meta", batchSize = 3000) {
-    while (true) {
-      const { data: idRows, error: selectError } = await supabase
-        .from(table)
-        .select("id")
-        .order("id", { ascending: true })
-        .limit(batchSize);
-      if (selectError) {
-        throw new Error(`${table} 조회 실패: ${selectError.message}`);
-      }
-      if (!idRows || idRows.length === 0) {
-        break;
-      }
-
-      const ids = idRows.map((row) => row.id as number).filter((id) => Number.isFinite(id));
-      const { error: deleteError } = await supabase.from(table).delete().in("id", ids);
-      if (deleteError) {
-        throw new Error(`${table} 삭제 실패: ${deleteError.message}`);
-      }
-      if (idRows.length < batchSize) {
-        break;
-      }
-    }
-  }
-
-  await clearTableInBatches("corpus_entries");
-  await clearTableInBatches("corpus_meta");
-
   const chunkSize = 1000;
   for (let i = 0; i < entriesToInsert.length; i += chunkSize) {
     const chunk = entriesToInsert.slice(i, i + chunkSize);
@@ -275,21 +247,42 @@ export async function saveCorpusFromZip(zipFile: File): Promise<CorpusData> {
       source_file: entry.sourceFile,
       sentence: entry.sentence,
     }));
-    const { error } = await supabase.from("corpus_entries").insert(payload);
+    const { error } = await supabase
+      .from("corpus_entries")
+      .upsert(payload, { onConflict: "source_file,sentence", ignoreDuplicates: true });
     if (error) {
       throw new Error(`코퍼스 저장 실패: ${error.message}`);
     }
   }
 
+  const { count: sentenceCount, error: countError } = await supabase
+    .from("corpus_entries")
+    .select("id", { count: "exact", head: true });
+  if (countError) {
+    throw new Error(`코퍼스 문장 수 조회 실패: ${countError.message}`);
+  }
+
+  const { data: fileRows, error: filesError } = await supabase
+    .from("corpus_entries")
+    .select("source_file");
+  if (filesError) {
+    throw new Error(`코퍼스 파일 수 조회 실패: ${filesError.message}`);
+  }
+  const fileCount = new Set((fileRows ?? []).map((row) => row.source_file as string)).size;
+
   const { error: metaInsertError } = await supabase.from("corpus_meta").insert({
-    total_files: totalFiles,
-    total_sentences: dedupMap.size,
+    total_files: fileCount,
+    total_sentences: sentenceCount ?? 0,
   });
   if (metaInsertError) {
     throw new Error(`코퍼스 메타 저장 실패: ${metaInsertError.message}`);
   }
 
-  return corpus;
+  return {
+    ...corpus,
+    totalFiles: fileCount,
+    totalSentences: sentenceCount ?? 0,
+  };
 }
 
 export async function loadCorpus(): Promise<CorpusData | null> {

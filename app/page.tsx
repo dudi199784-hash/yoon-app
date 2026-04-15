@@ -136,7 +136,7 @@ export default function Home() {
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">코퍼스 기반 단어 의미 검색기</h1>
           <p className="mt-2 text-sm text-zinc-300">
-            최초 1회 ZIP 파일을 적재하면, 이후에는 단어 검색만으로 뜻별 대표 예문(영문+해석)을
+            ZIP 파일을 누적 적재한 뒤, 단어 검색만으로 뜻별 대표 예문(영문+해석)을
             가져옵니다.
           </p>
         </div>
@@ -156,9 +156,9 @@ export default function Home() {
 
         <section className="rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-lg font-semibold">코퍼스 적재 (최초 1회)</h2>
+            <h2 className="text-lg font-semibold">코퍼스 적재 (누적 추가)</h2>
             <p className="text-sm text-zinc-300">
-              .hwpx/.txt 파일이 들어있는 ZIP을 올리면 서버에 코퍼스를 저장합니다.
+              .hwpx/.txt 파일이 들어있는 ZIP을 올리면 기존 데이터에 코퍼스를 누적 저장합니다.
             </p>
           </div>
           <label
