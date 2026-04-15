@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findCorpusCandidates, loadCorpus } from "@/lib/server/corpus";
+import { findCorpusCandidates, loadCorpus, sentenceContainsWord } from "@/lib/server/corpus";
 import { extractResponseText, parseJsonFromText } from "@/lib/server/openai";
 
 export const runtime = "nodejs";
@@ -36,6 +36,33 @@ function normalizeMeaningKey(meaning: string): string {
     .replace(/\s+/g, " ")
     .replace(/^\[(동|명|형|부|전|접|대|감|조|기타)\]\s*/g, "")
     .trim();
+}
+
+function normalizeSpaces(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function cleanEnglishExample(raw: string, word: string): string {
+  const compact = normalizeSpaces(raw);
+  if (!compact) return "";
+
+  // Remove common exam prefixes like numbering/bullets before English content.
+  const stripped = compact
+    .replace(/^[\[\(]?[0-9]+[\]\)]?\s*/g, "")
+    .replace(/^[0-9①-⑳ㄱ-ㅎ가-힣\[\]\(\)\-–—:·\s]+(?=[A-Za-z])/u, "");
+
+  const candidates = stripped.match(/[A-Za-z][^.!?]*[.!?]/g) ?? [];
+  if (candidates.length === 0) return stripped;
+
+  const normalized = candidates.map((item) => normalizeSpaces(item));
+  const picked = normalized.find((item) => sentenceContainsWord(item, word)) ?? normalized[0];
+  return picked;
+}
+
+function cleanKoreanExample(raw: string): string {
+  const compact = normalizeSpaces(raw);
+  if (!compact) return "";
+  return compact.replace(/^[\[\(]?[0-9]+[\]\)]?\s*/g, "");
 }
 
 export async function POST(req: Request) {
@@ -141,8 +168,8 @@ ${JSON.stringify(candidates.map((item) => item.sentence), null, 2)}`;
       deduped.set(key, {
         meaning: meaningText,
         example: {
-          english: item.example?.english?.trim() ?? "",
-          korean: item.example?.korean?.trim() ?? "",
+          english: cleanEnglishExample(item.example?.english?.trim() ?? "", word),
+          korean: cleanKoreanExample(item.example?.korean?.trim() ?? ""),
         },
       });
     }
