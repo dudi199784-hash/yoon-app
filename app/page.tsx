@@ -165,7 +165,7 @@ export default function Home() {
             type="file"
             accept=".zip"
             onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
-            className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm text-zinc-200 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1 file:text-white hover:file:bg-indigo-500"
+            className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm text-zinc-200 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1 file:text-zinc-100 hover:file:bg-zinc-700"
           />
           {zipFile && <p className="mt-2 text-sm text-emerald-700">선택됨: {zipFile.name}</p>}
           <div className="mt-3 flex items-center gap-3">
@@ -173,7 +173,7 @@ export default function Home() {
               type="button"
               onClick={() => void handleUploadCorpus()}
               disabled={uploading}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-md border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-60"
             >
               {uploading ? "적재 중..." : "ZIP 적재 실행"}
             </button>
@@ -215,7 +215,7 @@ export default function Home() {
               type="button"
               onClick={() => void handleSearch()}
               disabled={searching}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60 md:col-span-2"
+              className="rounded-md border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-60 md:col-span-2"
             >
               {searching ? "검색 중..." : "검색"}
             </button>
