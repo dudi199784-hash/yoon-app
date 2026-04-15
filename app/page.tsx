@@ -1,65 +1,272 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type CorpusStatus = {
+  exists: boolean;
+  createdAt?: string;
+  totalFiles?: number;
+  totalSentences?: number;
+};
+
+type SearchMeaning = {
+  meaning: string;
+  example: {
+    english: string;
+    korean: string;
+  };
+};
+
+type SearchResult = {
+  word: string;
+  meanings: SearchMeaning[];
+  candidateCount: number;
+};
 
 export default function Home() {
+  const [apiKey, setApiKey] = useState("");
+  const [status, setStatus] = useState<CorpusStatus>({ exists: false });
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [word, setWord] = useState("");
+  const [meaning, setMeaning] = useState("");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<SearchResult | null>(null);
+
+  useEffect(() => {
+    void refreshCorpusStatus();
+  }, []);
+
+  async function refreshCorpusStatus() {
+    try {
+      const res = await fetch("/api/corpus");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "코퍼스 상태 조회 실패");
+      setStatus(json as CorpusStatus);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "코퍼스 상태 조회 실패");
+    }
+  }
+
+  async function copyText(value: string) {
+    await navigator.clipboard.writeText(value);
+  }
+
+  function buildCopyAllText(data: SearchResult): string {
+    const lines: string[] = [];
+    lines.push(`단어: ${data.word}`);
+    for (const item of data.meanings) {
+      lines.push(`- 뜻: ${item.meaning}`);
+      lines.push(`  ${item.example.english}`);
+      lines.push(`  ${item.example.korean}`);
+    }
+    return lines.join("\n");
+  }
+
+  const resultCount = useMemo(() => result?.meanings.length ?? 0, [result]);
+
+  async function handleUploadCorpus() {
+    setError("");
+    setResult(null);
+    if (!zipFile) {
+      setError("먼저 ZIP 파일을 선택해 주세요.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("zip", zipFile);
+      const res = await fetch("/api/corpus", { method: "POST", body: formData });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(typeof json.error === "string" ? json.error : "코퍼스 업로드 실패");
+      }
+      await refreshCorpusStatus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "코퍼스 업로드 실패");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSearch() {
+    setError("");
+    setResult(null);
+    if (!apiKey.trim()) {
+      setError("OpenAI API Key를 입력해 주세요.");
+      return;
+    }
+    if (!status.exists) {
+      setError("먼저 ZIP 파일로 코퍼스를 적재해 주세요.");
+      return;
+    }
+    if (!word.trim()) {
+      setError("검색할 단어를 입력해 주세요.");
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          word: word.trim(),
+          meaning: meaning.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(typeof json.error === "string" ? json.error : "검색 실패");
+      }
+      setResult(json as SearchResult);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "검색 중 오류가 발생했습니다.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="mx-auto min-h-screen w-full max-w-5xl p-6 md:p-10">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold md:text-3xl">코퍼스 기반 단어 의미 검색기</h1>
+          <p className="mt-2 text-sm text-zinc-600">
+            최초 1회 ZIP 파일을 적재하면, 이후에는 단어 검색만으로 뜻별 대표 예문(영문+해석)을
+            가져옵니다.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <section className="rounded-xl border border-zinc-200 p-4">
+          <label className="mb-2 block text-sm font-medium">OpenAI API Key (사용자 직접 입력)</label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-..."
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 p-4">
+          <div className="mb-3">
+            <h2 className="text-lg font-semibold">코퍼스 적재 (최초 1회)</h2>
+            <p className="text-sm text-zinc-600">
+              .hwpx/.txt 파일이 들어있는 ZIP을 올리면 서버에 코퍼스를 저장합니다.
+            </p>
+          </div>
+          <input
+            type="file"
+            accept=".zip"
+            onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
+            className="text-sm"
+          />
+          {zipFile && <p className="mt-2 text-sm text-emerald-700">선택됨: {zipFile.name}</p>}
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleUploadCorpus()}
+              disabled={uploading}
+              className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {uploading ? "적재 중..." : "ZIP 적재 실행"}
+            </button>
+            {status.exists ? (
+              <p className="text-sm text-zinc-700">
+                저장됨: 파일 {status.totalFiles?.toLocaleString()}개 / 문장{" "}
+                {status.totalSentences?.toLocaleString()}개
+              </p>
+            ) : (
+              <p className="text-sm text-amber-700">아직 코퍼스가 저장되지 않았습니다.</p>
+            )}
+          </div>
+          {status.exists && status.createdAt && (
+            <p className="mt-2 text-xs text-zinc-500">
+              마지막 적재 시각: {new Date(status.createdAt).toLocaleString()}
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 p-4">
+          <h2 className="text-lg font-semibold">단어 검색</h2>
+          <p className="mb-3 text-sm text-zinc-600">
+            뜻을 비워두면 AI가 의미를 자동 분류하고, 의미당 예문 1개씩 반환합니다.
+          </p>
+          <div className="grid gap-2 md:grid-cols-12">
+            <input
+              value={word}
+              onChange={(e) => setWord(e.target.value)}
+              placeholder="단어 (예: run)"
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm md:col-span-4"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <input
+              value={meaning}
+              onChange={(e) => setMeaning(e.target.value)}
+              placeholder="뜻 (선택) - 예: [동] 운영하다"
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm md:col-span-6"
+            />
+            <button
+              type="button"
+              onClick={() => void handleSearch()}
+              disabled={searching}
+              className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-60 md:col-span-2"
+            >
+              {searching ? "검색 중..." : "검색"}
+            </button>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </section>
+
+        {result && (
+          <section className="rounded-xl border border-zinc-200 p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">검색 결과 (의미 {resultCount}개)</h2>
+              <p className="text-xs text-zinc-500">
+                코퍼스 후보 문장 수: {result.candidateCount.toLocaleString()}개
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyText(buildCopyAllText(result))}
+                className="rounded-md border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100"
+              >
+                전체 복사
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <article className="rounded-lg border border-zinc-200 p-3">
+                <h3 className="text-base font-bold">단어: {result.word}</h3>
+                <div className="mt-3 space-y-3">
+                  {result.meanings.map((item, idx) => {
+                    const payload = `${item.example.english}\n${item.example.korean}`;
+                    return (
+                      <div key={`${item.meaning}-${idx}`} className="rounded-md border border-zinc-200 p-3">
+                        <p className="mb-2 text-sm font-semibold text-zinc-800">뜻: {item.meaning}</p>
+                        <p className="text-sm">{item.example.english}</p>
+                        <p className="mt-1 text-sm text-zinc-700">{item.example.korean}</p>
+                        <button
+                          type="button"
+                          onClick={() => void copyText(payload)}
+                          className="mt-2 rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100"
+                        >
+                          복사
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {result.meanings.length === 0 && (
+                    <p className="text-sm text-zinc-500">해당 단어 예문을 찾지 못했습니다.</p>
+                  )}
+                </div>
+              </article>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
