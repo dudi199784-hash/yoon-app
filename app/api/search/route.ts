@@ -139,6 +139,7 @@ ${JSON.stringify(candidates.map((item) => item.sentence), null, 2)}`;
 
     const llmRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: req.signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,

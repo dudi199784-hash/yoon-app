@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type CorpusStatus = {
   exists: boolean;
@@ -33,9 +33,14 @@ export default function Home() {
   const [meaning, setMeaning] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void refreshCorpusStatus();
+    return () => {
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = null;
+    };
   }, []);
 
   async function refreshCorpusStatus() {
@@ -107,11 +112,14 @@ export default function Home() {
       return;
     }
 
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
     setSearching(true);
     try {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           word: word.trim(),
@@ -124,10 +132,21 @@ export default function Home() {
       }
       setResult(json as SearchResult);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setError("검색이 취소되었습니다.");
+        return;
+      }
       setError(e instanceof Error ? e.message : "검색 중 오류가 발생했습니다.");
     } finally {
+      if (searchAbortRef.current === controller) {
+        searchAbortRef.current = null;
+      }
       setSearching(false);
     }
+  }
+
+  function handleCancelSearch() {
+    searchAbortRef.current?.abort();
   }
 
   return (
@@ -227,6 +246,17 @@ export default function Home() {
               {searching ? "검색 중..." : "검색"}
             </button>
           </div>
+          {searching && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={handleCancelSearch}
+                className="rounded-md border border-rose-500 bg-rose-900/40 px-3 py-1.5 text-sm font-medium text-rose-200 hover:bg-rose-900/60"
+              >
+                중지
+              </button>
+            </div>
+          )}
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         </section>
 
